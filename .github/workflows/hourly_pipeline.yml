@@ -19,7 +19,7 @@ jobs:
           python-version: '3.11'
 
       - name: Install ML Dependencies
-        run: pip install hopsworks pandas requests
+        run: pip install hopsworks pandas requests pyarrow
 
       - name: Execute Feature Pipeline Script
         env:
