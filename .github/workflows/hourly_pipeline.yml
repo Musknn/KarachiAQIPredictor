@@ -2,7 +2,7 @@ name: Hourly Automated Feature Pipeline
 
 on:
   schedule:
-    - cron: '0 * * * *'
+    - cron: '18 * * * *'
   workflow_dispatch:
 
 jobs:
@@ -26,4 +26,3 @@ jobs:
           HOPSWORKS_API_KEY: ${{ secrets.HOPSWORKS_API_KEY }}
         run: python feature_pipeline.py
 
-        
