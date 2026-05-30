@@ -1,0 +1,17 @@
+# Secrets
+.env
+
+# Virtual Environments
+venv/
+env/
+
+# Model Caches (Do not upload heavy .pkl files to GitHub)
+model_cache/
+
+# Python Cache
+__pycache__/
+*.pyc
+
+# OS Files
+.DS_Store
+Thumbs.db
