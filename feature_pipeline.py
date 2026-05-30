@@ -17,7 +17,7 @@ print("🔐 Authenticating with Hopsworks Cloud...")
 project = hopsworks.login(api_key_value=os.environ["HOPSWORKS_API_KEY"])
 fs = project.get_feature_store()
 
-# 3. Push to Feature Store (Update 'karachi_aqi_features' if your group name is different!)
+# 3. Push to Feature Store
 print("🗄️ Pushing fresh data to Feature Store...")
 try:
     aqi_fg = fs.get_feature_group(name="karachi_aqi_features", version=1)
