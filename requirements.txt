@@ -1,0 +1,8 @@
+streamlit
+hopsworks
+pandas
+requests
+scikit-learn
+lightgbm
+joblib
+python-dotenv
