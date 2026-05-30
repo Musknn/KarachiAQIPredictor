@@ -1,0 +1,27 @@
+name: Daily Model Performance Monitor
+
+on:
+  schedule:
+    - cron: '18 0 * * *' # Runs every day at midnight
+  workflow_dispatch:
+
+jobs:
+  run-model-monitor:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install ML Dependencies
+        run: pip install hopsworks pandas requests scikit-learn lightgbm
+
+      - name: Execute Monitoring Script
+        env:
+          HOPSWORKS_API_KEY: ${{ secrets.HOPSWORKS_API_KEY }}
+        run: python model_monitor.py
