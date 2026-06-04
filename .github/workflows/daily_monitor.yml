@@ -19,8 +19,7 @@ jobs:
           python-version: '3.11'
 
       - name: Install ML Dependencies
-        run: pip install hopsworks pandas requests scikit-learn lightgbm
-
+        run: pip install hopsworks pandas requests scikit-learn lightgbm pyarrow
       - name: Execute Monitoring Script
         env:
           HOPSWORKS_API_KEY: ${{ secrets.HOPSWORKS_API_KEY }}
