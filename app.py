@@ -121,20 +121,31 @@ if st.sidebar.button("Run 3-Day Forecast"):
                 
                 with col_forecast:
                     st.subheader("🗓️ What the Next 3 Days Look Like")
-                    # Group by date to extract maximum expected pollution daily
+                    # Group by date to extract both MAXIMUM (peak) and MEAN (average)
                     future_data['date_label'] = future_data['time'].dt.strftime('%A (%d %b)')
-                    daily_summary = future_data.groupby('date_label').agg({
-                        'Predicted_AQI': 'max',
-                        'Predicted_PM2_5': 'max'
-                    }).reindex(future_data['date_label'].unique())
+                    
+                    daily_summary = future_data.groupby('date_label').agg(
+                        Peak_AQI=('Predicted_AQI', 'max'),
+                        Avg_AQI=('Predicted_AQI', 'mean'),
+                        Peak_PM25=('Predicted_PM2_5', 'max'),
+                        Avg_PM25=('Predicted_PM2_5', 'mean')
+                    ).reindex(future_data['date_label'].unique())
                     
                     card_cols = st.columns(len(daily_summary))
                     for idx, (date_str, row) in enumerate(daily_summary.iterrows()):
                         with card_cols[idx]:
-                            day_aqi = int(row['Predicted_AQI'])
-                            day_status, day_emoji = get_aqi_status(day_aqi)
-                            st.metric(label=date_str, value=f"{day_aqi}", delta=day_status, delta_color="inverse")
-                            st.caption(f"Peak: {row['Predicted_PM2_5']:.1f} µg/m³")
+                            peak_aqi = int(row['Peak_AQI'])
+                            avg_aqi = int(row['Avg_AQI'])
+                            
+                            # We still base the health warning on the Peak (worst-case scenario)
+                            day_status, day_emoji = get_aqi_status(peak_aqi) 
+                            
+                            # Display Peak as the main metric
+                            st.metric(label=date_str, value=f"{peak_aqi} (Peak)", delta=day_status, delta_color="inverse")
+                            
+                            # Add the Daily Averages underneath
+                            st.markdown(f"**Daily Average AQI:** {avg_aqi}")
+                            st.caption(f"Raw PM2.5 — Peak: {row['Peak_PM25']:.1f} | Avg: {row['Avg_PM25']:.1f}")
 
                 # 6. Dashboard UI: Live Alert System
                 st.write("---")
