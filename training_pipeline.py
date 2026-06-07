@@ -12,7 +12,9 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.pipeline import Pipeline
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 import lightgbm as lgb
-
+from dotenv import load_dotenv
+import os
+load_dotenv() # This reads the .env file in your folder
 # ─────────────────────────────────────────────
 # 0. BOOT
 # ─────────────────────────────────────────────
