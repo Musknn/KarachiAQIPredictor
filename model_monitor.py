@@ -30,18 +30,30 @@ df = df.iloc[1:].reset_index(drop=True)
 print("🔐 Connecting to Hopsworks Model Registry...")
 project = hopsworks.login(api_key_value=os.environ["HOPSWORKS_API_KEY"])
 mr = project.get_model_registry()
-model_file = mr.get_model("karachi_aqi_production", version=1)
+
+# Use the production alias
+model_name = "karachi_aqi_production"
+model_meta = mr.get_model(model_name)
+
+if model_meta is None:
+    raise ValueError(f"Model '{model_name}' not found in Registry.")
 
 save_folder = "model_cache"
 os.makedirs(save_folder, exist_ok=True)
-model_file.download(save_folder)
+model_meta.download(save_folder)
 ensemble_model = joblib.load(os.path.join(save_folder, "karachi_aqi_production.pkl"))
 
 # 4. Make Predictions vs. Actuals
-expected_columns = list(ensemble_model.feature_names_in_)
+# FIX: Safely retrieve feature names from internal estimators
+if hasattr(ensemble_model, 'feature_names_in_'):
+    expected_columns = list(ensemble_model.feature_names_in_)
+else:
+    # Fallback to the first estimator (e.g., Ridge) in the VotingRegressor
+    expected_columns = list(ensemble_model.estimators_[0][1].feature_names_in_)
+
 X_test = df[expected_columns]
-y_actual = df['pm2_5']  # The true value
-y_pred = ensemble_model.predict(X_test) # The model's guess
+y_actual = df['pm2_5']
+y_pred = ensemble_model.predict(X_test)
 
 # 5. Calculate Metrics
 mse = mean_squared_error(y_actual, y_pred)
@@ -53,7 +65,6 @@ print(f"Mean Squared Error (MSE): {mse:.2f}")
 print(f"Mean Absolute Error (MAE): {mae:.2f}")
 print("-" * 30)
 
-# Optional safety alert: If MAE spikes above 10, the model might be breaking!
 if mae > 10:
     print("⚠️ WARNING: Concept drift detected! Model accuracy is dropping.")
 else:

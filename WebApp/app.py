@@ -175,8 +175,7 @@ if st.sidebar.button("Run 3-Day Forecast", type="primary"):
             
                 future_data = future_data.iloc[-72:].reset_index(drop=True)
 
-    
-                _sensor   = ['pm10', 'pm2_5', 'carbon_monoxide', 'nitrogen_dioxide',
+                _sensor   = ['pm10', 'pm2_5', 'carbon_monoxide', 'nitrogen_dioxide', 'sulphur_dioxide',
                              'ozone', 'aerosol_optical_depth', 'dust', 'uv_index']
                 _temporal = ['hour', 'day', 'month', 'day_of_week']
                 _change   = sorted([f'{c}_change' for c in _sensor])
