@@ -30,20 +30,11 @@ df = df.iloc[1:].reset_index(drop=True)
 print("🔐 Connecting to Hopsworks Model Registry...")
 project = hopsworks.login(api_key_value=os.environ["HOPSWORKS_API_KEY"])
 mr = project.get_model_registry()
-
-# Use the production alias we created in the training pipeline
-model_name = "karachi_aqi_production"
-model_meta = mr.get_model(model_name) 
-
-if model_meta is None:
-    raise ValueError(f"Model '{model_name}' not found in Registry. Check your Training Pipeline logs!")
+model_file = mr.get_model("karachi_aqi_production", version=1)
 
 save_folder = "model_cache"
 os.makedirs(save_folder, exist_ok=True)
-model_file = model_meta.download(save_folder)
-
-# Construct the path based on where Hopsworks downloaded it
-# Usually, model_meta.download() returns the path to the folder or file
+model_file.download(save_folder)
 ensemble_model = joblib.load(os.path.join(save_folder, "karachi_aqi_production.pkl"))
 
 # 4. Make Predictions vs. Actuals
