@@ -84,8 +84,25 @@ def load_latest_model(mr):
     cached_path = os.path.join(save_folder, f"karachi_aqi_production_{today_str}.pkl")
 
     if os.path.exists(cached_path):
-        st.sidebar.caption("📂 Using today's cached model.")
-        return joblib.load(cached_path)
+        # Validate the cache is not a numpy-array-trained model with Column_0 names
+        _m = joblib.load(cached_path)
+        _bad = False
+        def _check_names(m):
+            if hasattr(m, 'feature_names_in_'):
+                names = list(m.feature_names_in_)
+                if names and str(names[0]).startswith('Column_'):
+                    return True
+            if hasattr(m, 'estimators_'):
+                for e in m.estimators_:
+                    if _check_names(e): return True
+            return False
+        _bad = _check_names(_m)
+        if not _bad:
+            st.sidebar.caption("📂 Using today's cached model.")
+            return _m
+        # Cache is corrupt — delete it and re-download
+        os.remove(cached_path)
+        st.sidebar.caption("🔄 Re-downloading model (cached version was incompatible)...")
 
     # No cache for today → fetch latest version from registry.
     # get_best_model picks the version with the lowest MSE (matches what
@@ -152,35 +169,16 @@ if st.sidebar.button("Run 3-Day Forecast", type="primary"):
                 for p in pollutants:
                     future_data[f'{p}_change'] = future_data[p].diff().fillna(0)
 
-                # Build the definitive feature column list.
-                # Primary: hardcoded list matching training_pipeline.py exactly.
-                # This is always correct and handles models trained on numpy arrays
-                # (which have no feature_names_in_) as well as DataFrame-trained ones.
+                # Always use the hardcoded column list — never trust feature_names_in_
+                # from the model. Models trained on numpy arrays store useless names
+                # like 'Column_0', 'Column_1', etc. which would crash inference.
+                # This list exactly matches FEATURE_COLS in training_pipeline.py:
+                #   8 sensors + 4 temporal + 8 sorted _change cols = 20 features
                 _sensor   = ['pm10', 'pm2_5', 'carbon_monoxide', 'nitrogen_dioxide',
                              'ozone', 'aerosol_optical_depth', 'dust', 'uv_index']
                 _temporal = ['hour', 'day', 'month', 'day_of_week']
                 _change   = sorted([f'{c}_change' for c in _sensor])
                 expected_columns = _sensor + _temporal + _change
-
-                # Sanity-check: if the model DOES have feature_names_in_ (trained
-                # on a DataFrame), verify our list matches it exactly.
-                def _get_feature_names(model):
-                    if hasattr(model, 'feature_names_in_'):
-                        return list(model.feature_names_in_)
-                    if hasattr(model, 'estimators_'):
-                        for est in model.estimators_:
-                            if hasattr(est, 'feature_names_in_'):
-                                return list(est.feature_names_in_)
-                            if hasattr(est, 'steps'):
-                                for _, step in est.steps:
-                                    if hasattr(step, 'feature_names_in_'):
-                                        return list(step.feature_names_in_)
-                    return None
-
-                model_cols = _get_feature_names(ensemble_model)
-                if model_cols is not None and model_cols != expected_columns:
-                    st.sidebar.warning(f"⚠️ Model column order differs — using model's order.")
-                    expected_columns = model_cols
 
                 X_inference = future_data[expected_columns]
 
