@@ -152,8 +152,23 @@ if st.sidebar.button("Run 3-Day Forecast", type="primary"):
                 for p in pollutants:
                     future_data[f'{p}_change'] = future_data[p].diff().fillna(0)
 
-                # Use the model's own expected column list — zero chance of mismatch
-                expected_columns = list(ensemble_model.feature_names_in_)
+                # Resolve expected feature columns from the model.
+                # VotingRegressor doesn't expose feature_names_in_ directly —
+                # pull it from the first base estimator which does.
+                # If today's champion is a plain Pipeline it exposes it directly.
+                if hasattr(ensemble_model, 'feature_names_in_'):
+                    expected_columns = list(ensemble_model.feature_names_in_)
+                elif hasattr(ensemble_model, 'estimators_'):
+                    # VotingRegressor: grab from first fitted base estimator
+                    expected_columns = list(ensemble_model.estimators_[0].feature_names_in_)
+                else:
+                    # Last-resort fallback: build manually, matching training_pipeline.py order
+                    _sensor  = ['pm10', 'pm2_5', 'carbon_monoxide', 'nitrogen_dioxide',
+                                'ozone', 'aerosol_optical_depth', 'dust', 'uv_index']
+                    _temporal = ['hour', 'day', 'month', 'day_of_week']
+                    _change   = sorted([f'{c}_change' for c in _sensor])
+                    expected_columns = _sensor + _temporal + _change
+
                 X_inference = future_data[expected_columns]
 
                 # 4. Predict
@@ -254,4 +269,4 @@ if st.sidebar.button("Run 3-Day Forecast", type="primary"):
             except Exception as e:
                 st.error(f"Pipeline Error: {e}")
                 st.exception(e)
-
+                
