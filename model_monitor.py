@@ -30,7 +30,7 @@ df = df.iloc[1:].reset_index(drop=True)
 print("🔐 Connecting to Hopsworks Model Registry...")
 project = hopsworks.login(api_key_value=os.environ["HOPSWORKS_API_KEY"])
 mr = project.get_model_registry()
-model_file = mr.get_model("karachi_ensemble_aqi_final", version=1)
+model_file = mr.get_model("karachi_ensemble_aqi_final", version=2)
 
 save_folder = "model_cache"
 os.makedirs(save_folder, exist_ok=True)

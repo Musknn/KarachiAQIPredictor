@@ -149,7 +149,7 @@ if st.sidebar.button("Run 3-Day Forecast", type="primary"):
                 url = (
                     "https://air-quality-api.open-meteo.com/v1/air-quality"
                     "?latitude=24.8607&longitude=67.0011"
-                    "&hourly=pm10,pm2_5,carbon_monoxide,nitrogen_dioxide,"
+                    "&hourly=pm10,pm2_5,carbon_monoxide,nitrogen_dioxide,sulphur_dioxide"
                     "ozone,aerosol_optical_depth,dust,uv_index"
                     "&timezone=Asia%2FKarachi&past_days=1&forecast_days=3"
                 )
@@ -166,7 +166,7 @@ if st.sidebar.button("Run 3-Day Forecast", type="primary"):
 
                 # Momentum delta features (8 pollutants, no sulphur_dioxide)
                 pollutants = [
-                    'pm10', 'pm2_5', 'carbon_monoxide', 'nitrogen_dioxide',
+                    'pm10', 'pm2_5', 'carbon_monoxide', 'nitrogen_dioxide', 'sulphur_dioxide',
                     'ozone', 'aerosol_optical_depth', 'dust', 'uv_index',
                 ]
                 for p in pollutants:

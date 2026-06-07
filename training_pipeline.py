@@ -43,7 +43,7 @@ df["time"] = pd.to_datetime(df["time"])
 df = df.sort_values("time").reset_index(drop=True)
 
 sensor_cols = [
-    "pm10", "pm2_5", "carbon_monoxide", "nitrogen_dioxide",
+    "pm10", "pm2_5", "carbon_monoxide", "nitrogen_dioxide", "sulphur_dioxide",
     "ozone", "aerosol_optical_depth", "dust", "uv_index",
 ]
 
