@@ -143,12 +143,15 @@ if st.sidebar.button("Run 3-Day Forecast", type="primary"):
                 # NOTE: sulphur_dioxide is excluded — it returned all-NaN for
                 # Karachi and was never stored in the Feature Store, so the
                 # trained model does not expect it as a feature.
+                # 2. Fetch 72-hour forecast data PLUS 24-hours of past data
+                # We need the past data so the .diff() function has a baseline
+                # for the very first hour of the forecast.
                 url = (
                     "https://air-quality-api.open-meteo.com/v1/air-quality"
                     "?latitude=24.8607&longitude=67.0011"
                     "&hourly=pm10,pm2_5,carbon_monoxide,nitrogen_dioxide,"
                     "ozone,aerosol_optical_depth,dust,uv_index"
-                    "&timezone=Asia%2FKarachi&forecast_days=3"
+                    "&timezone=Asia%2FKarachi&past_days=1&forecast_days=3"
                 )
                 response = requests.get(url).json()
                 future_data = pd.DataFrame(response['hourly'])
@@ -168,6 +171,12 @@ if st.sidebar.button("Run 3-Day Forecast", type="primary"):
                 ]
                 for p in pollutants:
                     future_data[f'{p}_change'] = future_data[p].diff().fillna(0)
+
+                # CRITICAL FIX: Now that momentum is calculated, slice off the 
+                # 24 hours of past data so we ONLY predict the 72 future hours.
+                # Since past_days=1 is 24 hours, and forecast_days=3 is 72 hours,
+                # we keep the last 72 rows.
+                future_data = future_data.iloc[-72:].reset_index(drop=True)
 
                 # Always use the hardcoded column list — never trust feature_names_in_
                 # from the model. Models trained on numpy arrays store useless names
