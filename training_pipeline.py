@@ -45,10 +45,56 @@ print("\n🔧 Engineering features...")
 df["time"] = pd.to_datetime(df["time"])
 df = df.sort_values("time").reset_index(drop=True)
 
+# ── Resolve sensor column names dynamically ──────────────────────────
+# Hopsworks v2 may sanitise column names (e.g. strip special chars,
+# lowercase). We match our canonical names against whatever is actually
+# present in the dataframe so a single-character mismatch never crashes.
+CANONICAL_SENSOR_COLS = [
+    "pm10", "pm2_5", "carbon_monoxide", "nitrogen_dioxide",
+    "sulphur_dioxide", "ozone", "aerosol_optical_depth",
+    "dust", "uv_index",
+]
+
+actual_cols = set(df.columns.str.lower())
+sensor_cols = []
+missing_canonical = []
+
+for canonical in CANONICAL_SENSOR_COLS:
+    if canonical in df.columns:
+        sensor_cols.append(canonical)
+    else:
+        # Try common Hopsworks sanitisations
+        candidates = [
+            canonical,
+            canonical.replace("_", ""),        # aerosolopticaldepth
+            canonical.replace("ph", "f"),       # sulphur → sulfur (ph→f)
+        ]
+        matched = None
+        for c in df.columns:
+            if c.lower() in [x.lower() for x in candidates]:
+                matched = c
+                break
+        if matched:
+            sensor_cols.append(matched)
+            if matched != canonical:
+                print(f"   ⚠️  Column '{canonical}' found as '{matched}' in Hopsworks — using '{matched}'.")
+        else:
+            missing_canonical.append(canonical)
+
+if missing_canonical:
+    print(f"\n   ℹ️  Actual DataFrame columns: {list(df.columns)}")
+    raise KeyError(
+        f"Could not find these sensor columns in the Feature Store data: "
+        f"{missing_canonical}\n"
+        f"Actual columns available: {list(df.columns)}"
+    )
+
+# Resolve target column (pm2_5 may also be stored differently)
+TARGET_COL = sensor_cols[CANONICAL_SENSOR_COLS.index("pm2_5")]  # follows resolved name
+print(f"   Resolved sensor columns: {sensor_cols}")
+# ─────────────────────────────────────────────────────────────────────
+
 # Drop rows where ALL sensor columns are NaN (systemic outages)
-sensor_cols = ["pm10", "pm2_5", "carbon_monoxide", "nitrogen_dioxide",
-               "sulphur_dioxide", "ozone", "aerosol_optical_depth",
-               "dust", "uv_index"]
 df = df.dropna(subset=sensor_cols, how="all")
 
 # Forward-fill minor sensor glitches (<2% per feature)

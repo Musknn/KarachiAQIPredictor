@@ -89,10 +89,10 @@ if st.sidebar.button("Run 3-Day Forecast", type="primary"): # Made the button st
                 # 1. Connect to Hopsworks and load the model
                 project = hopsworks.login(api_key_value=api_key)
                 mr = project.get_model_registry()
-                model_file = mr.get_model("karachi_ensemble_aqi_final", version=1)
+                model_file = mr.get_model("karachi_aqi_production", version=1)
                 
                 save_folder = os.path.join(os.getcwd(), "model_cache")
-                model_path = os.path.join(save_folder, "karachi_ensemble_aqi_final.pkl")
+                model_path = os.path.join(save_folder, "karachi_aqi_production.pkl")
                 
                 if not os.path.exists(model_path):
                     os.makedirs(save_folder, exist_ok=True)
