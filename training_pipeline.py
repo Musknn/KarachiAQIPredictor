@@ -33,35 +33,20 @@ print("✅ Connected.")
 # 2. FETCH FEATURES FROM FEATURE STORE
 # ─────────────────────────────────────────────
 print("\n📦 Fetching features from Feature Store...")
-aqi_fg = fs.get_feature_group(name="karachi_aqi_features", version=1)
+aqi_fg = fs.get_feature_group(name="karachi_aqi_features", version=2)
 df = aqi_fg.read()
 print(f"   Raw rows fetched: {len(df)}")
 
-# ─────────────────────────────────────────────
-# 3. PREPARE FEATURES
-# ─────────────────────────────────────────────
-# The hourly feature_pipeline.py already computed and stored ALL features:
-#   - raw sensor cols (pm10, pm2_5, carbon_monoxide, nitrogen_dioxide,
-#     ozone, aerosol_optical_depth, dust, uv_index)
-#   - temporal cols  (hour, day, month, day_of_week)
-#   - momentum cols  (*_change for each sensor)
-# NOTE: sulphur_dioxide was never ingested into the Feature Store (the
-#       Open-Meteo endpoint returned NaN for Karachi; it was silently
-#       dropped on first insert). Do NOT include it.
-# We just clean and sort — no re-engineering needed.
 print("\n🔧 Preparing features from Feature Store...")
 
 df["time"] = pd.to_datetime(df["time"])
 df = df.sort_values("time").reset_index(drop=True)
 
-# These are the 8 raw sensor columns confirmed present in the Feature Store
 sensor_cols = [
     "pm10", "pm2_5", "carbon_monoxide", "nitrogen_dioxide",
     "ozone", "aerosol_optical_depth", "dust", "uv_index",
 ]
 
-# Verify they all exist — if something changed in the Feature Store schema
-# this will tell us exactly which column is missing instead of a cryptic error
 missing = [c for c in sensor_cols if c not in df.columns]
 if missing:
     print(f"\n   ℹ️  Actual DataFrame columns: {list(df.columns)}")
@@ -82,10 +67,6 @@ print(f"   Columns available: {list(df.columns)}")
 # ─────────────────────────────────────────────
 print("\n✂️  Splitting data chronologically (80 / 20)...")
 
-# Build FEATURE_COLS from what's actually stored in the Feature Store.
-# The hourly pipeline already stored temporal + _change cols — use them directly.
-# Do NOT re-derive _change cols here; they're already present and re-computing
-# them would overwrite the stored values with ones based on cleaned-data diffs.
 temporal_cols = [c for c in ["hour", "day", "month", "day_of_week"] if c in df.columns]
 change_cols   = sorted([c for c in df.columns if c.endswith("_change")])
 FEATURE_COLS  = sensor_cols + temporal_cols + change_cols

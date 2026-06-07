@@ -20,7 +20,7 @@ fs = project.get_feature_store()
 # 3. Push to Feature Store
 print("🗄️ Pushing fresh data to Feature Store...")
 try:
-    aqi_fg = fs.get_feature_group(name="karachi_aqi_features", version=1)
+    aqi_fg = fs.get_feature_group(name="karachi_aqi_features", version=2)
     aqi_fg.insert(df)
     print("✅ Successfully updated Hopsworks Feature Store!")
 except Exception as e:

@@ -172,17 +172,10 @@ if st.sidebar.button("Run 3-Day Forecast", type="primary"):
                 for p in pollutants:
                     future_data[f'{p}_change'] = future_data[p].diff().fillna(0)
 
-                # CRITICAL FIX: Now that momentum is calculated, slice off the 
-                # 24 hours of past data so we ONLY predict the 72 future hours.
-                # Since past_days=1 is 24 hours, and forecast_days=3 is 72 hours,
-                # we keep the last 72 rows.
+            
                 future_data = future_data.iloc[-72:].reset_index(drop=True)
 
-                # Always use the hardcoded column list — never trust feature_names_in_
-                # from the model. Models trained on numpy arrays store useless names
-                # like 'Column_0', 'Column_1', etc. which would crash inference.
-                # This list exactly matches FEATURE_COLS in training_pipeline.py:
-                #   8 sensors + 4 temporal + 8 sorted _change cols = 20 features
+    
                 _sensor   = ['pm10', 'pm2_5', 'carbon_monoxide', 'nitrogen_dioxide',
                              'ozone', 'aerosol_optical_depth', 'dust', 'uv_index']
                 _temporal = ['hour', 'day', 'month', 'day_of_week']
