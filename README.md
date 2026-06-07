@@ -158,7 +158,7 @@ jupyter notebook EDA10PearlsAQI.ipynb
 | 5 | Forward-fill minor sensor gaps (<2% per feature) | Dataset mathematically complete |
 | 6 | Drop `uv_index_clear_sky` (corr=0.98 with `uv_index`) | Removes multicollinearity |
 | 7 | Engineer time features: `hour`, `day`, `month`, `day_of_week` | +4 features |
-| 8 | Engineer momentum deltas: `*_change` for remaining pollutants via `.diff().fillna(0)` | +8 features → **20 total** |
+| 8 | Engineer momentum deltas: `*_change` for each of the 9 pollutants via `.diff().fillna(0)` | +9 features → **22 predictors total** |
 After EDA, the clean feature dataset is uploaded to the **Hopsworks Feature Store** (Feature Group: `karachi_aqi_features`, version 2).
 
 ---
@@ -209,12 +209,12 @@ jupyter notebook TrainingModels10Pearls.ipynb
 - **LightGBM:** `n_estimators=220, learning_rate=0.015, max_depth=2, num_leaves=12, subsample=0.65, colsample_bytree=0.75`
 - **Random Forest:** `n_estimators=500, max_depth=3, min_samples_split=18, min_samples_leaf=12`
 
-**Models stored in Hopsworks Model Registry:**
+**Models stored in Hopsworks Model Registry (from notebook):**
 - `karachi_ridge_aqi_final` — version 1
 - `karachi_lgb_aqi_final` — version 1
-- `karachi_ensemble_aqi_final` — version 1 (production model)
+- `karachi_ensemble_aqi_final` — version 1
 
-All models are wrapped in `Pipeline([('scaler', StandardScaler()), ('model', ...)])`.
+The daily `training_pipeline.py` additionally registers versioned models under `karachi_ridge_aqi_daily`, `karachi_lgbm_aqi_daily`, `karachi_rf_aqi_daily`, `karachi_ensemble_aqi_daily`, and promotes the lowest-MSE champion to `karachi_aqi_production` — the alias loaded by the Streamlit dashboard.
 
 ---
 
@@ -226,16 +226,16 @@ This script is triggered **every day at 02:00 UTC** by `daily_training.yml`. To 
 python training_pipeline.py
 ```
 
-**Champion-Challenger protocol:**
+**Champion selection protocol:**
 
 1. Fetch all records from Hopsworks Feature Store (includes latest hourly appends)
-2. Reserve the most recent **7 days** as the challenger evaluation set (`X_eval`, `y_eval`)
-3. Train Ridge, LightGBM, and VotingEnsemble on all prior data (`X_train`)
-4. Evaluate all challengers on `X_eval` → pick lowest MAE → that is the **challenger**
-5. Fetch current **champion's** MAE from Hopsworks Model Registry metadata
-6. Promote only if: `MAE_challenger < MAE_champion × (1 − 0.02)` (must improve by >2%)
-7. If promoted: save `.pkl`, register new version in Model Registry, store MAE in metadata
-8. If not promoted: champion is retained, outcome is logged to Actions log
+2. Sort chronologically; create 24-hour forward-shifted target `y = pm2_5[t+24]`
+3. Apply an **80/20 chronological split** (no shuffling) → 26,726 train rows / 6,682 test rows
+4. Train all four architectures (Ridge, LightGBM, Random Forest, VotingEnsemble) on the training split
+5. Evaluate all four on the held-out 20% test set → MSE, RMSE, MAE, R²
+6. Select the model with the **lowest MSE** as today's champion
+7. Register all four models under their own registry names; additionally register the champion under `karachi_aqi_production` (latest version)
+8. Save a structured JSON log `model_artifacts/daily_log_YYYY-MM-DD.json` with all metrics
 
 **Cron schedule in GitHub Actions:** `0 2 * * *` (02:00 UTC = 07:00 PKT)
 
@@ -253,7 +253,7 @@ python model_monitor.py
 
 1. GET request to Open-Meteo with `past_days=1&forecast_days=0` → 24 actual hourly PM2.5 readings for yesterday
 2. Applies identical feature engineering (temporal + momentum deltas); drops first row with `.iloc[1:]`
-3. Downloads `karachi_ensemble_aqi_final` v1 from Hopsworks Model Registry → `model_cache/*.pkl`
+3. Downloads latest version of `karachi_aqi_production` from Hopsworks Model Registry → `model_cache/*.pkl`
 4. Calls `ensemble_model.predict(X_test)` on yesterday's features
 5. Computes `MSE` and `MAE` vs. yesterday's actual PM2.5
 6. Prints structured health report to Actions log
@@ -278,7 +278,7 @@ Then open `http://localhost:8501` in your browser.
 
 **What happens on each button press ("Run 3-Day Forecast"):**
 
-1. Authenticate with Hopsworks → download `karachi_ensemble_aqi_final` latest version → cache to `model_cache/`
+1. Authenticate with Hopsworks → resolve latest version of `karachi_aqi_production` → cache today-stamped `.pkl` to `model_cache/`
 2. GET request to Open-Meteo with `past_days=1&forecast_days=3&timezone=Asia%2FKarachi` → 96 hours of data (past 24h sliced off after momentum calculations to leave 72 future hours).
 3. Apply feature engineering (same pipeline as training)
 4. `ensemble_model.predict(X_inference)` → 72 raw PM2.5 predictions
@@ -289,7 +289,7 @@ Then open `http://localhost:8501` in your browser.
    - Otherwise → `st.success()` — green banner, clean air
 7. Two-column layout: "Right Now" card (current AQI + PM2.5) | "72-Hour Outlook" (3 daily summary cards)
 8. `st.line_chart()` — 72-hour AQI trend line chart
-9. `st.expander()` — full raw inference dataframe with all 72 rows and 22 feature columns
+9. `st.expander()` — full raw inference dataframe with all 72 rows and all 22 feature columns
 
 **EPA AQI Breakpoints implemented in `calculate_epa_aqi()`:**
 
@@ -328,7 +328,7 @@ And the Python scripts read it via `os.environ["HOPSWORKS_API_KEY"]`. The value 
 | **Role** | Data ingestion | Drift detection | Model improvement |
 | **Reads from** | Open-Meteo API | Open-Meteo API | Hopsworks Feature Store |
 | **Writes to** | Hopsworks Feature Store | Actions log | Hopsworks Model Registry |
-| **Decision** | — | Alert if MAE > 10 | Promote if MAE improves > 2% |
+| **Decision** | — | Alert if MAE > 10 | Promote lowest-MSE champion daily |
 | **Runner** | `ubuntu-latest` | `ubuntu-latest` | `ubuntu-latest` |
 | **Manual trigger** | `workflow_dispatch` | `workflow_dispatch` | `workflow_dispatch` |
 
@@ -368,10 +368,10 @@ feature_pipeline.py
          ▼                                                       │  (daily_monitor.yml)
 training_pipeline.py                                             ▼
   → fetches all Feature Store data               model_monitor.py
-  → trains Ridge / LightGBM / Ensemble             → fetches yesterday's actuals
-  → evaluates on rolling 7-day holdout              → loads champion from Registry
-  → champion-challenger comparison                  → computes MAE / MSE
-  → promotes winner to Model Registry               → alerts if MAE > 10 µg/m³
+  → trains Ridge / LightGBM / RF / Ensemble       → fetches yesterday's actuals
+  → evaluates on 80/20 chronological split         → loads karachi_aqi_production
+  → promotes lowest-MSE model to                  → computes MAE / MSE
+    karachi_aqi_production in Registry             → alerts if MAE > 10 µg/m³
          │
          │  (on button press, Streamlit Cloud)
          ▼
@@ -392,23 +392,27 @@ WebApp/app.py
 | Resource | Name | Version |
 |---|---|---|
 | Feature Group | `karachi_aqi_features` | v2 |
-| Registered Model | `karachi_ridge_aqi_final` | v1 |
-| Registered Model | `karachi_lgb_aqi_final` | v1 |
-| Registered Model | `karachi_pytorch_aqi_final` | v1 (Deep Learning Completeness) |
-| Registered Model (production) | `karachi_aqi_production` | latest (auto-updated daily) |
+| Registered Model | `karachi_ridge_aqi_final` | v1 (notebook baseline) |
+| Registered Model | `karachi_lgb_aqi_final` | v1 (notebook baseline) |
+| Registered Model | `karachi_ensemble_aqi_final` | v1 (notebook baseline) |
+| Registered Model | `karachi_pytorch_aqi_final` | v1 (evaluated; excluded from ensemble) |
+| Daily Model | `karachi_ridge_aqi_daily` | latest (auto-updated daily) |
+| Daily Model | `karachi_lgbm_aqi_daily` | latest (auto-updated daily) |
+| Daily Model | `karachi_rf_aqi_daily` | latest (auto-updated daily) |
+| Daily Model | `karachi_ensemble_aqi_daily` | latest (auto-updated daily) |
+| Production alias | `karachi_aqi_production` | latest (today's lowest-MSE champion) |
 
-The Feature Group has an **Offline Store** (historical data for training) and an **Online Store** (low-latency retrieval for the dashboard). The dashboard uses the Online Store.
+The Streamlit dashboard always loads `karachi_aqi_production` latest version.
 
 ---
 
-## Feature Schema (20 features used by all models)
+## Feature Schema (22 features used by all models)
 
-**Raw pollutant features (8):** `pm10`, `pm2_5`, `carbon_monoxide`, `nitrogen_dioxide`, `ozone`, `aerosol_optical_depth`, `dust`, `uv_index`  
-*(Note: `sulphur_dioxide` is excluded as it frequently returns null data for the Karachi sensor grid).*
+**Raw sensor features (9):** `pm10`, `pm2_5`, `carbon_monoxide`, `nitrogen_dioxide`, `sulphur_dioxide`, `ozone`, `aerosol_optical_depth`, `dust`, `uv_index`
 
 **Temporal features (4):** `hour`, `day`, `month`, `day_of_week`
 
-**Momentum delta features (8) — computed via `.diff().fillna(0)`:** `pm10_change`, `pm2_5_change`, `carbon_monoxide_change`, `nitrogen_dioxide_change`, `ozone_change`, `aerosol_optical_depth_change`, `dust_change`, `uv_index_change`
+**Momentum delta features (9) — computed via `.diff().fillna(0)`:** `pm10_change`, `pm2_5_change`, `carbon_monoxide_change`, `nitrogen_dioxide_change`, `sulphur_dioxide_change`, `ozone_change`, `aerosol_optical_depth_change`, `dust_change`, `uv_index_change`
 
 **Target variable (not a feature):** `pm2_5` shifted forward 24 hours: `y_t = pm2_5[t+24]`
 
@@ -434,11 +438,11 @@ Inference (dashboard) call:
 
 ```text
 ?latitude=24.8607&longitude=67.0011&past_days=1&forecast_days=3
-&hourly=pm10,pm2_5,carbon_monoxide,nitrogen_dioxide,
+&hourly=pm10,pm2_5,carbon_monoxide,nitrogen_dioxide,sulphur_dioxide,
         ozone,aerosol_optical_depth,dust,uv_index
 &timezone=Asia%2FKarachi
 ```
-(Note: We fetch past_days=1 to provide a baseline for the .diff() momentum calculations on the first hour of the future forecast, after which the past 24 hours are sliced off).
+(Note: `past_days=1` provides a 24-hour baseline so `.diff()` momentum calculations have a valid prior row for the very first forecast hour; after feature engineering the past 24 rows are sliced off, leaving 72 future rows for prediction).
 
 No API key required for Open-Meteo.
 
