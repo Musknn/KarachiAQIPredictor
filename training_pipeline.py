@@ -103,11 +103,13 @@ TARGET_COL = "pm2_5"
 df["target"] = df[TARGET_COL].shift(-24)
 df = df.dropna(subset=["target"])
 
-X = df[FEATURE_COLS].values
+# Keep as DataFrame (not .values) so sklearn Pipelines store feature_names_in_.
+# This is what allows app.py to call model.feature_names_in_ at inference time.
+X = df[FEATURE_COLS]
 y = df["target"].values
 
 split_idx = int(len(X) * 0.80)
-X_train, X_test = X[:split_idx], X[split_idx:]
+X_train, X_test = X.iloc[:split_idx], X.iloc[split_idx:]
 y_train, y_test = y[:split_idx], y[split_idx:]
 
 print(f"   Train: {len(X_train)} rows | Test: {len(X_test)} rows")

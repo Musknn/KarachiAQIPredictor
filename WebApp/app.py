@@ -152,22 +152,35 @@ if st.sidebar.button("Run 3-Day Forecast", type="primary"):
                 for p in pollutants:
                     future_data[f'{p}_change'] = future_data[p].diff().fillna(0)
 
-                # Resolve expected feature columns from the model.
-                # VotingRegressor doesn't expose feature_names_in_ directly —
-                # pull it from the first base estimator which does.
-                # If today's champion is a plain Pipeline it exposes it directly.
-                if hasattr(ensemble_model, 'feature_names_in_'):
-                    expected_columns = list(ensemble_model.feature_names_in_)
-                elif hasattr(ensemble_model, 'estimators_'):
-                    # VotingRegressor: grab from first fitted base estimator
-                    expected_columns = list(ensemble_model.estimators_[0].feature_names_in_)
-                else:
-                    # Last-resort fallback: build manually, matching training_pipeline.py order
-                    _sensor  = ['pm10', 'pm2_5', 'carbon_monoxide', 'nitrogen_dioxide',
-                                'ozone', 'aerosol_optical_depth', 'dust', 'uv_index']
-                    _temporal = ['hour', 'day', 'month', 'day_of_week']
-                    _change   = sorted([f'{c}_change' for c in _sensor])
-                    expected_columns = _sensor + _temporal + _change
+                # Build the definitive feature column list.
+                # Primary: hardcoded list matching training_pipeline.py exactly.
+                # This is always correct and handles models trained on numpy arrays
+                # (which have no feature_names_in_) as well as DataFrame-trained ones.
+                _sensor   = ['pm10', 'pm2_5', 'carbon_monoxide', 'nitrogen_dioxide',
+                             'ozone', 'aerosol_optical_depth', 'dust', 'uv_index']
+                _temporal = ['hour', 'day', 'month', 'day_of_week']
+                _change   = sorted([f'{c}_change' for c in _sensor])
+                expected_columns = _sensor + _temporal + _change
+
+                # Sanity-check: if the model DOES have feature_names_in_ (trained
+                # on a DataFrame), verify our list matches it exactly.
+                def _get_feature_names(model):
+                    if hasattr(model, 'feature_names_in_'):
+                        return list(model.feature_names_in_)
+                    if hasattr(model, 'estimators_'):
+                        for est in model.estimators_:
+                            if hasattr(est, 'feature_names_in_'):
+                                return list(est.feature_names_in_)
+                            if hasattr(est, 'steps'):
+                                for _, step in est.steps:
+                                    if hasattr(step, 'feature_names_in_'):
+                                        return list(step.feature_names_in_)
+                    return None
+
+                model_cols = _get_feature_names(ensemble_model)
+                if model_cols is not None and model_cols != expected_columns:
+                    st.sidebar.warning(f"⚠️ Model column order differs — using model's order.")
+                    expected_columns = model_cols
 
                 X_inference = future_data[expected_columns]
 
@@ -269,4 +282,3 @@ if st.sidebar.button("Run 3-Day Forecast", type="primary"):
             except Exception as e:
                 st.error(f"Pipeline Error: {e}")
                 st.exception(e)
-                
