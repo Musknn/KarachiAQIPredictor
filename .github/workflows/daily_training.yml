@@ -1,0 +1,62 @@
+name: Daily Automated Training Pipeline
+
+on:
+  schedule:
+    # Runs every day at 02:00 UTC (07:00 PKT)
+    # Fires after the hourly pipeline has had time to push fresh data
+    - cron: '0 2 * * *'
+  workflow_dispatch:   # allow manual trigger from the Actions tab
+
+jobs:
+  run-training-pipeline:
+    runs-on: ubuntu-latest
+
+    steps:
+      # ── 1. Pull the repository ──────────────────────────────────
+      - name: Checkout Code Repository
+        uses: actions/checkout@v4
+
+      # ── 2. Set up Python ────────────────────────────────────────
+      - name: Setup Python 3.11 Environment
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      # ── 3. Cache pip dependencies for faster reruns ─────────────
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-training-${{ hashFiles('requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-training-
+
+      # ── 4. Install all ML dependencies ──────────────────────────
+      - name: Install ML Dependencies
+        run: |
+          pip install --upgrade pip
+          pip install \
+            hopsworks \
+            pandas \
+            numpy \
+            scikit-learn \
+            lightgbm \
+            joblib \
+            pyarrow \
+            requests
+
+      # ── 5. Run the training script ───────────────────────────────
+      - name: Execute Daily Training Pipeline
+        env:
+          HOPSWORKS_API_KEY: ${{ secrets.HOPSWORKS_API_KEY }}
+        run: python training_pipeline.py
+
+      # ── 6. Upload the daily log as a build artifact ──────────────
+      #    (visible under Actions → this run → Artifacts)
+      - name: Upload Daily Results Log
+        if: always()   # upload even if the step above failed, for debugging
+        uses: actions/upload-artifact@v4
+        with:
+          name: daily-training-log-${{ github.run_id }}
+          path: model_artifacts/daily_log_*.json
+          retention-days: 30
