@@ -38,91 +38,65 @@ df = aqi_fg.read()
 print(f"   Raw rows fetched: {len(df)}")
 
 # ─────────────────────────────────────────────
-# 3. FEATURE ENGINEERING  (mirrors feature_pipeline.py)
+# 3. PREPARE FEATURES
 # ─────────────────────────────────────────────
-print("\n🔧 Engineering features...")
+# The hourly feature_pipeline.py already computed and stored ALL features:
+#   - raw sensor cols (pm10, pm2_5, carbon_monoxide, nitrogen_dioxide,
+#     ozone, aerosol_optical_depth, dust, uv_index)
+#   - temporal cols  (hour, day, month, day_of_week)
+#   - momentum cols  (*_change for each sensor)
+# NOTE: sulphur_dioxide was never ingested into the Feature Store (the
+#       Open-Meteo endpoint returned NaN for Karachi; it was silently
+#       dropped on first insert). Do NOT include it.
+# We just clean and sort — no re-engineering needed.
+print("\n🔧 Preparing features from Feature Store...")
 
 df["time"] = pd.to_datetime(df["time"])
 df = df.sort_values("time").reset_index(drop=True)
 
-# ── Resolve sensor column names dynamically ──────────────────────────
-# Hopsworks v2 may sanitise column names (e.g. strip special chars,
-# lowercase). We match our canonical names against whatever is actually
-# present in the dataframe so a single-character mismatch never crashes.
-CANONICAL_SENSOR_COLS = [
+# These are the 8 raw sensor columns confirmed present in the Feature Store
+sensor_cols = [
     "pm10", "pm2_5", "carbon_monoxide", "nitrogen_dioxide",
-    "sulphur_dioxide", "ozone", "aerosol_optical_depth",
-    "dust", "uv_index",
+    "ozone", "aerosol_optical_depth", "dust", "uv_index",
 ]
 
-actual_cols = set(df.columns.str.lower())
-sensor_cols = []
-missing_canonical = []
-
-for canonical in CANONICAL_SENSOR_COLS:
-    if canonical in df.columns:
-        sensor_cols.append(canonical)
-    else:
-        # Try common Hopsworks sanitisations
-        candidates = [
-            canonical,
-            canonical.replace("_", ""),        # aerosolopticaldepth
-            canonical.replace("ph", "f"),       # sulphur → sulfur (ph→f)
-        ]
-        matched = None
-        for c in df.columns:
-            if c.lower() in [x.lower() for x in candidates]:
-                matched = c
-                break
-        if matched:
-            sensor_cols.append(matched)
-            if matched != canonical:
-                print(f"   ⚠️  Column '{canonical}' found as '{matched}' in Hopsworks — using '{matched}'.")
-        else:
-            missing_canonical.append(canonical)
-
-if missing_canonical:
+# Verify they all exist — if something changed in the Feature Store schema
+# this will tell us exactly which column is missing instead of a cryptic error
+missing = [c for c in sensor_cols if c not in df.columns]
+if missing:
     print(f"\n   ℹ️  Actual DataFrame columns: {list(df.columns)}")
-    raise KeyError(
-        f"Could not find these sensor columns in the Feature Store data: "
-        f"{missing_canonical}\n"
-        f"Actual columns available: {list(df.columns)}"
-    )
+    raise KeyError(f"Expected sensor columns missing from Feature Store: {missing}")
 
-# Resolve target column (pm2_5 may also be stored differently)
-TARGET_COL = sensor_cols[CANONICAL_SENSOR_COLS.index("pm2_5")]  # follows resolved name
-print(f"   Resolved sensor columns: {sensor_cols}")
-# ─────────────────────────────────────────────────────────────────────
-
-# Drop rows where ALL sensor columns are NaN (systemic outages)
+# Drop rows where ALL sensor readings are NaN (systemic outages)
 df = df.dropna(subset=sensor_cols, how="all")
 
-# Forward-fill minor sensor glitches (<2% per feature)
+# Forward-fill any remaining minor gaps
 df[sensor_cols] = df[sensor_cols].ffill()
 df = df.dropna(subset=sensor_cols)
 
-# Temporal features
-df["hour"]        = df["time"].dt.hour
-df["day"]         = df["time"].dt.day
-df["month"]       = df["time"].dt.month
-df["day_of_week"] = df["time"].dt.dayofweek
-
-# Momentum delta features
-for col in sensor_cols:
-    df[f"{col}_change"] = df[col].diff().fillna(0)
-
 print(f"   Rows after cleaning: {len(df)}")
+print(f"   Columns available: {list(df.columns)}")
 
 # ─────────────────────────────────────────────
 # 4. BUILD TRAIN/TEST SPLIT (chronological 80/20)
 # ─────────────────────────────────────────────
 print("\n✂️  Splitting data chronologically (80 / 20)...")
 
-FEATURE_COLS = (
-    sensor_cols
-    + ["hour", "day", "month", "day_of_week"]
-    + [f"{c}_change" for c in sensor_cols]
-)
+# Build FEATURE_COLS from what's actually stored in the Feature Store.
+# The hourly pipeline already stored temporal + _change cols — use them directly.
+# Do NOT re-derive _change cols here; they're already present and re-computing
+# them would overwrite the stored values with ones based on cleaned-data diffs.
+temporal_cols = [c for c in ["hour", "day", "month", "day_of_week"] if c in df.columns]
+change_cols   = sorted([c for c in df.columns if c.endswith("_change")])
+FEATURE_COLS  = sensor_cols + temporal_cols + change_cols
+
+# Safety check — crash loudly if anything is unexpectedly missing
+missing_feat = [c for c in FEATURE_COLS if c not in df.columns]
+if missing_feat:
+    raise KeyError(f"Feature columns missing from dataframe: {missing_feat}")
+
+print(f"   Feature columns ({len(FEATURE_COLS)} total): {FEATURE_COLS}")
+
 TARGET_COL = "pm2_5"
 
 # 24-hour forward-shift target
