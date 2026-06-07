@@ -401,19 +401,16 @@ The Feature Group has an **Offline Store** (historical data for training) and an
 
 ---
 
-## Feature Schema (23 features used by all models)
+## Feature Schema (20 features used by all models)
 
-**Raw pollutant features (9):**  
-`pm10`, `pm2_5`, `carbon_monoxide`, `nitrogen_dioxide`, `sulphur_dioxide`, `ozone`, `aerosol_optical_depth`, `dust`, `uv_index`
+**Raw pollutant features (8):** `pm10`, `pm2_5`, `carbon_monoxide`, `nitrogen_dioxide`, `ozone`, `aerosol_optical_depth`, `dust`, `uv_index`  
+*(Note: `sulphur_dioxide` is excluded as it frequently returns null data for the Karachi sensor grid).*
 
-**Temporal features (4):**  
-`hour`, `day`, `month`, `day_of_week`
+**Temporal features (4):** `hour`, `day`, `month`, `day_of_week`
 
-**Momentum delta features (9) — computed via `.diff().fillna(0)`:**  
-`pm10_change`, `pm2_5_change`, `carbon_monoxide_change`, `nitrogen_dioxide_change`, `sulphur_dioxide_change`, `ozone_change`, `aerosol_optical_depth_change`, `dust_change`, `uv_index_change`
+**Momentum delta features (8) — computed via `.diff().fillna(0)`:** `pm10_change`, `pm2_5_change`, `carbon_monoxide_change`, `nitrogen_dioxide_change`, `ozone_change`, `aerosol_optical_depth_change`, `dust_change`, `uv_index_change`
 
-**Target variable (not a feature):**  
-`pm2_5` shifted forward 24 hours: `y_t = pm2_5[t+24]`
+**Target variable (not a feature):** `pm2_5` shifted forward 24 hours: `y_t = pm2_5[t+24]`
 
 The model's expected column order is enforced via `ensemble_model.feature_names_in_` at inference time.
 
