@@ -158,9 +158,8 @@ jupyter notebook EDA10PearlsAQI.ipynb
 | 5 | Forward-fill minor sensor gaps (<2% per feature) | Dataset mathematically complete |
 | 6 | Drop `uv_index_clear_sky` (corr=0.98 with `uv_index`) | Removes multicollinearity |
 | 7 | Engineer time features: `hour`, `day`, `month`, `day_of_week` | +4 features |
-| 8 | Engineer momentum deltas: `*_change` for all 9 pollutants via `.diff().fillna(0)` | +9 features → **23 total** |
-
-After EDA, the clean feature dataset is uploaded to the **Hopsworks Feature Store** (Feature Group: `karachi_aqi_features`, version 1).
+| 8 | Engineer momentum deltas: `*_change` for remaining pollutants via `.diff().fillna(0)` | +8 features → **20 total** |
+After EDA, the clean feature dataset is uploaded to the **Hopsworks Feature Store** (Feature Group: `karachi_aqi_features`, version 2).
 
 ---
 
@@ -177,7 +176,7 @@ python feature_pipeline.py
 1. GET request to Open-Meteo Air Quality API with `past_days=1&forecast_days=0` for Karachi coordinates
 2. Applies the same feature engineering as EDA (temporal features + momentum deltas)
 3. Authenticates with Hopsworks using `HOPSWORKS_API_KEY` from `.env`
-4. Calls `.insert(df)` on Feature Group `karachi_aqi_features` v1 to append the 24 new rows
+4. Calls `.insert(df)` on Feature Group `karachi_aqi_features` v2 to append the 24 new rows
 5. Wrapped in `try/except` — errors are logged without crashing
 
 **Cron schedule in GitHub Actions:** `18 * * * *` (runs at minute 18 of every hour)
@@ -280,7 +279,7 @@ Then open `http://localhost:8501` in your browser.
 **What happens on each button press ("Run 3-Day Forecast"):**
 
 1. Authenticate with Hopsworks → download `karachi_ensemble_aqi_final` latest version → cache to `model_cache/`
-2. GET request to Open-Meteo with `forecast_days=3&timezone=Asia%2FKarachi` → 72 hours of future atmospheric data
+2. GET request to Open-Meteo with `past_days=1&forecast_days=3&timezone=Asia%2FKarachi` → 96 hours of data (past 24h sliced off after momentum calculations to leave 72 future hours).
 3. Apply feature engineering (same pipeline as training)
 4. `ensemble_model.predict(X_inference)` → 72 raw PM2.5 predictions
 5. Pass each through `calculate_epa_aqi()` (piecewise linear EPA formula) → 72 AQI scores
@@ -392,7 +391,7 @@ WebApp/app.py
 
 | Resource | Name | Version |
 |---|---|---|
-| Feature Group | `karachi_aqi_features` | v1 |
+| Feature Group | `karachi_aqi_features` | v2 |
 | Registered Model | `karachi_ridge_aqi_final` | v1 |
 | Registered Model | `karachi_lgb_aqi_final` | v1 |
 | Registered Model | `karachi_pytorch_aqi_final` | v1 (Deep Learning Completeness) |
@@ -424,20 +423,22 @@ The model's expected column order is enforced via `ensemble_model.feature_names_
 **Karachi coordinates:** `latitude=24.8607&longitude=67.0011&timezone=Asia%2FKarachi`
 
 **Historical / feature pipeline call:**
-```
-?latitude=24.8607&longitude=67.0011&past_days=1&forecast_days=3
-&hourly=pm10,pm2_5,carbon_monoxide,nitrogen_dioxide,
-ozone,aerosol_optical_depth,dust,uv_index
-&timezone=Asia%2FKarachi
-```
-
-**Inference (dashboard) call:**
-```
-?latitude=24.8607&longitude=67.0011&forecast_days=3
+```text
+?latitude=24.8607&longitude=67.0011&past_days=1&forecast_days=0
 &hourly=pm10,pm2_5,carbon_monoxide,nitrogen_dioxide,sulphur_dioxide,
         ozone,aerosol_optical_depth,dust,uv_index
 &timezone=Asia%2FKarachi
 ```
+
+Inference (dashboard) call:
+
+```text
+?latitude=24.8607&longitude=67.0011&past_days=1&forecast_days=3
+&hourly=pm10,pm2_5,carbon_monoxide,nitrogen_dioxide,
+        ozone,aerosol_optical_depth,dust,uv_index
+&timezone=Asia%2FKarachi
+```
+(Note: We fetch past_days=1 to provide a baseline for the .diff() momentum calculations on the first hour of the future forecast, after which the past 24 hours are sliced off).
 
 No API key required for Open-Meteo.
 
