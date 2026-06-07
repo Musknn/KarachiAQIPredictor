@@ -22,14 +22,11 @@ st.markdown("""
     <style>
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
-    header {visibility: hidden;}
+    /* Do NOT hide the header, as it contains the sidebar toggle on many devices */
+    header {visibility: visible;} 
     .block-container {
         padding-top: 2rem;
         padding-bottom: 2rem;
-    }
-    [data-testid="stMetricValue"] {
-        font-size: 2.8rem !important;
-        font-weight: 700 !important;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -74,51 +71,23 @@ def get_aqi_status(aqi_val):
         return "Hazardous", "🟤"
 
 def load_latest_model(mr):
-    """
-    Always fetches the latest version of karachi_aqi_production from the
-    Model Registry. Caches it locally with today's date in the filename so
-    yesterday's stale .pkl is never reused after the daily training run.
-    """
     today_str = datetime.utcnow().strftime("%Y-%m-%d")
     save_folder = os.path.join(os.getcwd(), "model_cache")
     os.makedirs(save_folder, exist_ok=True)
     cached_path = os.path.join(save_folder, f"karachi_aqi_production_{today_str}.pkl")
 
+    # Always re-download — delete stale cache if it exists
     if os.path.exists(cached_path):
-        # Validate the cache is not a numpy-array-trained model with Column_0 names
-        _m = joblib.load(cached_path)
-        _bad = False
-        def _check_names(m):
-            if hasattr(m, 'feature_names_in_'):
-                names = list(m.feature_names_in_)
-                if names and str(names[0]).startswith('Column_'):
-                    return True
-            if hasattr(m, 'estimators_'):
-                for e in m.estimators_:
-                    if _check_names(e): return True
-            return False
-        _bad = _check_names(_m)
-        if not _bad:
-            st.sidebar.caption("📂 Using today's cached model.")
-            return _m
-        # Cache is corrupt — delete it and re-download
         os.remove(cached_path)
-        st.sidebar.caption("🔄 Re-downloading model (cached version was incompatible)...")
+        st.sidebar.caption("🔄 Clearing stale cache, re-downloading...")
 
-    # No cache for today → fetch latest version from registry.
-    # get_best_model picks the version with the lowest MSE (matches what
-    # training_pipeline.py logs). Falls back to highest version number if
-    # the Hopsworks tier does not support get_best_model.
-    try:
-        model_meta = mr.get_best_model("karachi_aqi_production", metric="mse", direction="min")
-    except Exception:
-        all_versions = mr.get_models("karachi_aqi_production")
-        model_meta = max(all_versions, key=lambda m: m.version)
+    # Always use the highest version number explicitly
+    all_versions = mr.get_models("karachi_aqi_production")
+    model_meta = max(all_versions, key=lambda m: m.version)
 
     st.sidebar.caption(f"☁️ Downloading model v{model_meta.version} from registry...")
     model_meta.download(save_folder)
 
-    # Rename to date-stamped path so tomorrow's run re-downloads fresh
     raw_path = os.path.join(save_folder, "karachi_aqi_production.pkl")
     if os.path.exists(raw_path):
         os.rename(raw_path, cached_path)
