@@ -201,7 +201,7 @@ jupyter notebook TrainingModels10Pearls.ipynb
 | 2 | 10-fold TimeSeriesSplit baseline tournament: Ridge (RMSE 12.47), Random Forest (12.48), LightGBM (12.35), PyTorch (14.81) |
 | 3 | RandomizedSearchCV over wide parameter grids (30 configs Ridge, 30 LightGBM, 20 RF, 15 PyTorch) |
 | 4 | GridSearchCV over narrow micro-grids around Phase 3 winners → final configs |
-| 5 | VotingRegressor ensemble = Ridge + LightGBM + Random Forest (PyTorch excluded: RMSE too high) |
+| 5 | VotingRegressor ensemble = Ridge + LightGBM + Random Forest. *(Note: PyTorch DNN architecture was also trained and pushed to the Model Registry for completeness, but excluded from the final production ensemble to optimize inference speed and variance).* |
 | 6 | Evaluate all 4 models on vaulted test set → Ensemble: RMSE=11.02, MAE=7.98, R²=0.35 |
 | 7 | SHAP explainability — TreeExplainer on 2,000-sample subset; blended importance weighted by inverse RMSE |
 
@@ -392,10 +392,11 @@ WebApp/app.py
 
 | Resource | Name | Version |
 |---|---|---|
-| Feature Group | `karachi_aqi_features` | v1 (ID: 41826) |
+| Feature Group | `karachi_aqi_features` | v1 |
 | Registered Model | `karachi_ridge_aqi_final` | v1 |
 | Registered Model | `karachi_lgb_aqi_final` | v1 |
-| Registered Model (production) | `karachi_ensemble_aqi_final` | latest (auto-updated daily) |
+| Registered Model | `karachi_pytorch_aqi_final` | v1 (Deep Learning Completeness) |
+| Registered Model (production) | `karachi_aqi_production` | latest (auto-updated daily) |
 
 The Feature Group has an **Offline Store** (historical data for training) and an **Online Store** (low-latency retrieval for the dashboard). The dashboard uses the Online Store.
 
@@ -424,9 +425,9 @@ The model's expected column order is enforced via `ensemble_model.feature_names_
 
 **Historical / feature pipeline call:**
 ```
-?latitude=24.8607&longitude=67.0011&past_days=1&forecast_days=0
-&hourly=pm10,pm2_5,carbon_monoxide,nitrogen_dioxide,sulphur_dioxide,
-        ozone,aerosol_optical_depth,dust,uv_index
+?latitude=24.8607&longitude=67.0011&past_days=1&forecast_days=3
+&hourly=pm10,pm2_5,carbon_monoxide,nitrogen_dioxide,
+ozone,aerosol_optical_depth,dust,uv_index
 &timezone=Asia%2FKarachi
 ```
 
