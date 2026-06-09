@@ -3,6 +3,7 @@
 **Author:** Muskan Pawan | IBA Karachi | 10Pearls Shine Internship 2026  
 **Live Dashboard:** https://karachiaqipredictor-hdeggxz4ambqcjvhfdnqvt.streamlit.app/  
 **Hopsowork:** https://eu-west.cloud.hopsworks.ai/p/33022/view
+
 **Domain:** Data Sciences | Air Quality Index (AQI) Forecasting  
 
 ---
